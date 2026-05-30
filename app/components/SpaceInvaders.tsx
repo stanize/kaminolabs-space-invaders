@@ -6,6 +6,8 @@ const W = 480;
 const H = 460;
 const ALIEN_COLORS = ["#ff4444", "#ffaa00", "#44ff99"];
 
+const isMobile = () => window.matchMedia("(pointer: coarse)").matches;
+
 interface Bullet {
   x: number;
   y: number;
@@ -445,6 +447,19 @@ export default function SpaceInvaders() {
   const hit = (ax: number, ay: number, aw: number, ah: number, bx: number, by: number, bw: number, bh: number) =>
     Math.abs(ax - bx) < (aw + bw) / 2 && Math.abs(ay - by) < (ah + bh) / 2;
 
+  // Prevent page scroll/zoom while touching the canvas
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const prevent = (e: TouchEvent) => e.preventDefault();
+    canvas.addEventListener("touchstart", prevent, { passive: false });
+    canvas.addEventListener("touchmove", prevent, { passive: false });
+    return () => {
+      canvas.removeEventListener("touchstart", prevent);
+      canvas.removeEventListener("touchmove", prevent);
+    };
+  }, []);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -483,7 +498,8 @@ export default function SpaceInvaders() {
       if (s.keys["ArrowRight"] || s.keys["d"] || s.keys["D"]) s.px = Math.min(W - 18, s.px + 4);
 
       const now = performance.now();
-      if ((s.keys[" "] || s.keys["shoot"]) && now - s.lastShot > 300) {
+      const fireRate = s.keys["boost"] ? 150 : 300;
+      if ((s.keys[" "] || s.keys["shoot"] || isMobile()) && now - s.lastShot > fireRate) {
         s.bullets.push({ x: s.px, y: s.py - 14 });
         s.lastShot = now;
         audioRef.current.playShoot();
@@ -676,26 +692,32 @@ export default function SpaceInvaders() {
   };
 
   return (
-    <div className="flex flex-col items-center gap-3 p-4 select-none">
-      <div className="flex justify-between w-[480px] text-sm font-mono text-gray-400">
+    <div className="flex flex-col items-center gap-3 p-3 select-none">
+
+      {/* HUD — stretches to canvas width on all screen sizes */}
+      <div className="flex justify-between w-full max-w-[480px] text-sm font-mono text-gray-400">
         <span>SCORE: <b id="sc" className="text-white">0</b></span>
         <span>LEVEL: <b id="lv" className="text-white">1</b></span>
         <span>LIVES: <b id="li" className="text-white">♥♥♥</b></span>
         <span>BEST: <b id="hi" className="text-white">0</b></span>
       </div>
 
-      <canvas
-        ref={canvasRef}
-        width={W}
-        height={H}
-        className="border border-gray-700 rounded-lg"
-        style={{ background: "#050510" }}
-      />
+      {/* Canvas — intrinsic resolution 480×460, CSS scales it to fit the screen */}
+      <div className="w-full max-w-[480px]">
+        <canvas
+          ref={canvasRef}
+          width={W}
+          height={H}
+          className="border border-gray-700 rounded-lg"
+          style={{ width: "100%", height: "auto", display: "block", background: "#050510" }}
+        />
+      </div>
 
+      {/* System buttons */}
       <div className="flex gap-3">
         <button
           onClick={startGame}
-          className="px-5 py-2 font-mono text-sm border border-gray-600 rounded text-gray-200 hover:border-cyan-500 hover:text-cyan-400 transition-colors bg-transparent"
+          className="px-5 py-2 min-h-[44px] font-mono text-sm border border-gray-600 rounded text-gray-200 hover:border-cyan-500 hover:text-cyan-400 transition-colors bg-transparent"
         >
           Start
         </button>
@@ -703,13 +725,13 @@ export default function SpaceInvaders() {
           id="btnPause"
           onClick={togglePause}
           disabled
-          className="px-5 py-2 font-mono text-sm border border-gray-600 rounded text-gray-200 hover:border-yellow-500 hover:text-yellow-400 transition-colors bg-transparent disabled:opacity-30 disabled:cursor-not-allowed"
+          className="px-5 py-2 min-h-[44px] font-mono text-sm border border-gray-600 rounded text-gray-200 hover:border-yellow-500 hover:text-yellow-400 transition-colors bg-transparent disabled:opacity-30 disabled:cursor-not-allowed"
         >
           Pause
         </button>
         <button
           onClick={audio.toggleMute}
-          className="px-5 py-2 font-mono text-sm border border-gray-600 rounded text-gray-200 hover:border-purple-500 hover:text-purple-400 transition-colors bg-transparent"
+          className="px-5 py-2 min-h-[44px] font-mono text-sm border border-gray-600 rounded text-gray-200 hover:border-purple-500 hover:text-purple-400 transition-colors bg-transparent"
           title={audio.muted ? "Unmute" : "Mute"}
         >
           {audio.muted ? "🔇" : "🔊"}
@@ -720,22 +742,29 @@ export default function SpaceInvaders() {
         ← → move &nbsp;|&nbsp; Space fire &nbsp;|&nbsp; P pause
       </p>
 
-      <div className="flex gap-4 mt-1">
-        {[
-          { label: "←", key: "ArrowLeft" },
-          { label: "●", key: "shoot" },
-          { label: "→", key: "ArrowRight" },
-        ].map(({ label, key }) => (
-          <button
-            key={key}
-            onPointerDown={() => handleMobile(key, true)}
-            onPointerUp={() => handleMobile(key, false)}
-            onPointerLeave={() => handleMobile(key, false)}
-            className="w-14 h-12 font-mono text-xl border border-gray-600 rounded text-gray-300 active:bg-gray-800 bg-transparent touch-none"
-          >
-            {label}
-          </button>
-        ))}
+      {/* D-pad touch controls — auto-fire active, just steer */}
+      <div
+        className="flex sm:hidden w-full max-w-[480px] gap-2"
+        style={{ touchAction: "none", userSelect: "none" }}
+      >
+        <button
+          onPointerDown={() => handleMobile("ArrowLeft", true)}
+          onPointerUp={() => handleMobile("ArrowLeft", false)}
+          onPointerLeave={() => handleMobile("ArrowLeft", false)}
+          className="w-1/2 min-h-[80px] font-mono text-xl border border-gray-600 rounded-lg text-gray-300 active:bg-gray-800 bg-transparent"
+          style={{ touchAction: "none" }}
+        >
+          ◀ LEFT
+        </button>
+        <button
+          onPointerDown={() => handleMobile("ArrowRight", true)}
+          onPointerUp={() => handleMobile("ArrowRight", false)}
+          onPointerLeave={() => handleMobile("ArrowRight", false)}
+          className="w-1/2 min-h-[80px] font-mono text-xl border border-gray-600 rounded-lg text-gray-300 active:bg-gray-800 bg-transparent"
+          style={{ touchAction: "none" }}
+        >
+          RIGHT ▶
+        </button>
       </div>
     </div>
   );
