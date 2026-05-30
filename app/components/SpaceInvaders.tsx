@@ -731,13 +731,17 @@ export default function SpaceInvaders() {
         {/* Start — shows pause.png while game is running */}
         <div
           onPointerDown={startGame}
-          style={{ cursor: "pointer", userSelect: "none", touchAction: "none" }}
+          onContextMenu={(e) => e.preventDefault()}
+          style={{ cursor: "pointer", userSelect: "none", touchAction: "none", WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
         >
           <Image
             src={gsDisplay === "playing" ? "/icons/pause.png" : "/icons/start.png"}
             alt={gsDisplay === "playing" ? "Game running" : "Start"}
             width={72}
             height={72}
+            draggable={false}
+            onContextMenu={(e) => e.preventDefault()}
+            style={{ pointerEvents: "none" }}
           />
         </div>
 
@@ -745,27 +749,34 @@ export default function SpaceInvaders() {
         <div
           id="btnPause"
           onPointerDown={togglePause}
+          onContextMenu={(e) => e.preventDefault()}
           style={{
             cursor: pauseActive ? "pointer" : "default",
             userSelect: "none",
             touchAction: "none",
             opacity: pauseActive ? 1 : 0.3,
             pointerEvents: pauseActive ? "auto" : "none",
+            WebkitTouchCallout: "none",
+            WebkitUserSelect: "none",
           }}
         >
-          <Image src="/icons/pause.png" alt="Pause / Resume" width={72} height={72} />
+          <Image src="/icons/pause.png" alt="Pause / Resume" width={72} height={72} draggable={false} onContextMenu={(e) => e.preventDefault()} style={{ pointerEvents: "none" }} />
         </div>
 
         {/* Mute toggle */}
         <div
           onPointerDown={audio.toggleMute}
-          style={{ cursor: "pointer", userSelect: "none", touchAction: "none" }}
+          onContextMenu={(e) => e.preventDefault()}
+          style={{ cursor: "pointer", userSelect: "none", touchAction: "none", WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
         >
           <Image
             src={audio.muted ? "/icons/mute.png" : "/icons/unmute.png"}
             alt={audio.muted ? "Unmute" : "Mute"}
             width={72}
             height={72}
+            draggable={false}
+            onContextMenu={(e) => e.preventDefault()}
+            style={{ pointerEvents: "none" }}
           />
         </div>
       </div>
@@ -785,6 +796,7 @@ export default function SpaceInvaders() {
             onPointerDown={() => { handleMobile("ArrowLeft", true); setPressed("left"); }}
             onPointerUp={() => { handleMobile("ArrowLeft", false); setPressed(null); }}
             onPointerLeave={() => { handleMobile("ArrowLeft", false); setPressed(null); }}
+            onContextMenu={(e) => e.preventDefault()}
             className="flex-1 flex items-center justify-center border-2 border-gray-500 rounded-lg"
             style={{
               height: 80,
@@ -792,14 +804,18 @@ export default function SpaceInvaders() {
               cursor: "pointer",
               opacity: pressed === "left" ? 0.6 : 1,
               transition: "opacity 0.05s",
+              WebkitTouchCallout: "none",
+              WebkitUserSelect: "none",
+              userSelect: "none",
             }}
           >
-            <Image src="/icons/left.png" alt="Move Left" width={80} height={80} />
+            <Image src="/icons/left.png" alt="Move Left" width={80} height={80} draggable={false} onContextMenu={(e) => e.preventDefault()} style={{ pointerEvents: "none" }} />
           </div>
           <div
             onPointerDown={() => { handleMobile("ArrowRight", true); setPressed("right"); }}
             onPointerUp={() => { handleMobile("ArrowRight", false); setPressed(null); }}
             onPointerLeave={() => { handleMobile("ArrowRight", false); setPressed(null); }}
+            onContextMenu={(e) => e.preventDefault()}
             className="flex-1 flex items-center justify-center border-2 border-gray-500 rounded-lg"
             style={{
               height: 80,
@@ -807,9 +823,12 @@ export default function SpaceInvaders() {
               cursor: "pointer",
               opacity: pressed === "right" ? 0.6 : 1,
               transition: "opacity 0.05s",
+              WebkitTouchCallout: "none",
+              WebkitUserSelect: "none",
+              userSelect: "none",
             }}
           >
-            <Image src="/icons/right.png" alt="Move Right" width={80} height={80} />
+            <Image src="/icons/right.png" alt="Move Right" width={80} height={80} draggable={false} onContextMenu={(e) => e.preventDefault()} style={{ pointerEvents: "none" }} />
           </div>
         </div>
       </div>
