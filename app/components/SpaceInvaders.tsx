@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 
 const W = 480;
 const H = 460;
@@ -30,6 +30,312 @@ interface Particle {
   life: number;
 }
 
+// ── Audio ─────────────────────────────────────────────────────────────────────
+
+function useAudio() {
+  const ctxRef = useRef<AudioContext | null>(null);
+  const masterRef = useRef<GainNode | null>(null);
+  const mutedRef = useRef(false);
+  const [muted, setMuted] = useState(false);
+  const musicRef = useRef<{ stop(): void; pause(): void; resume(): void } | null>(null);
+
+  const getCtx = useCallback(() => {
+    if (!ctxRef.current) {
+      ctxRef.current = new AudioContext();
+      masterRef.current = ctxRef.current.createGain();
+      masterRef.current.gain.value = mutedRef.current ? 0 : 1;
+      masterRef.current.connect(ctxRef.current.destination);
+    }
+    const ctx = ctxRef.current;
+    if (ctx.state === "suspended") ctx.resume();
+    return { ctx, master: masterRef.current! };
+  }, []);
+
+  const playShoot = useCallback(() => {
+    const { ctx, master } = getCtx();
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(1200, t);
+    osc.frequency.exponentialRampToValueAtTime(300, t + 0.09);
+    gain.gain.setValueAtTime(0.25, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+    osc.connect(gain); gain.connect(master);
+    osc.start(t); osc.stop(t + 0.1);
+  }, [getCtx]);
+
+  const playAlienExplosion = useCallback(() => {
+    const { ctx, master } = getCtx();
+    const t = ctx.currentTime;
+    const dur = 0.18;
+    const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const filt = ctx.createBiquadFilter();
+    filt.type = "bandpass"; filt.frequency.value = 600; filt.Q.value = 0.8;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.4, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    src.connect(filt); filt.connect(gain); gain.connect(master);
+    src.start(t); src.stop(t + dur);
+  }, [getCtx]);
+
+  const playPlayerHit = useCallback(() => {
+    const { ctx, master } = getCtx();
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const og = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(110, t);
+    osc.frequency.exponentialRampToValueAtTime(40, t + 0.35);
+    og.gain.setValueAtTime(0.55, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+    osc.connect(og); og.connect(master);
+    osc.start(t); osc.stop(t + 0.35);
+    const ndur = 0.12;
+    const nbuf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * ndur), ctx.sampleRate);
+    const nd = nbuf.getChannelData(0);
+    for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+    const ns = ctx.createBufferSource();
+    ns.buffer = nbuf;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.3, t);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + ndur);
+    ns.connect(ng); ng.connect(master);
+    ns.start(t); ns.stop(t + ndur);
+  }, [getCtx]);
+
+  const playLevelUp = useCallback(() => {
+    const { ctx, master } = getCtx();
+    const t = ctx.currentTime;
+    [523, 659, 784, 1047].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const st = t + i * 0.13;
+      osc.type = "sine"; osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, st);
+      gain.gain.linearRampToValueAtTime(0.3, st + 0.02);
+      gain.gain.setValueAtTime(0.3, st + 0.09);
+      gain.gain.exponentialRampToValueAtTime(0.001, st + 0.17);
+      osc.connect(gain); gain.connect(master);
+      osc.start(st); osc.stop(st + 0.17);
+    });
+  }, [getCtx]);
+
+  const playGameOver = useCallback(() => {
+    const { ctx, master } = getCtx();
+    const t = ctx.currentTime;
+    [440, 370, 330, 220].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const st = t + i * 0.23;
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(freq, st);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.82, st + 0.26);
+      gain.gain.setValueAtTime(0.3, st);
+      gain.gain.exponentialRampToValueAtTime(0.001, st + 0.27);
+      osc.connect(gain); gain.connect(master);
+      osc.start(st); osc.stop(st + 0.27);
+    });
+  }, [getCtx]);
+
+  const startMusic = useCallback(() => {
+    const { ctx, master } = getCtx();
+    if (musicRef.current) musicRef.current.stop();
+
+    // Shared gate — ramp to 0 on pause, back to 1 on resume
+    const musicGain = ctx.createGain();
+    musicGain.gain.value = 1;
+    musicGain.connect(master);
+
+    let stopped = false;
+    let paused = false;
+
+    // ── Layer 1: Bass Drone ──────────────────────────────────────────────────
+    // 55 Hz sine, LFO at 0.1 Hz slowly bends pitch ±5 Hz (50–60 Hz)
+    const bassGain = ctx.createGain();
+    bassGain.gain.value = 0.04;
+    bassGain.connect(musicGain);
+
+    const bassOsc = ctx.createOscillator();
+    bassOsc.type = "sine";
+    bassOsc.frequency.value = 55;
+    bassOsc.connect(bassGain);
+
+    const lfo = ctx.createOscillator();
+    lfo.type = "sine";
+    lfo.frequency.value = 0.1;
+    const lfoAmp = ctx.createGain();
+    lfoAmp.gain.value = 5;          // ±5 Hz around 55 Hz
+    lfo.connect(lfoAmp);
+    lfoAmp.connect(bassOsc.frequency);
+
+    bassOsc.start();
+    lfo.start();
+
+    // ── Layer 2: Arpeggio ────────────────────────────────────────────────────
+    // Square wave stepping A2 → C3 → E3 → G3 every 200 ms
+    const arpGain = ctx.createGain();
+    arpGain.gain.value = 0.03;
+    arpGain.connect(musicGain);
+
+    const ARP_NOTES = [110, 130, 165, 196];
+    let arpIdx = 0;
+    let arpNext = ctx.currentTime + 0.05;
+    let arpTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function scheduleArp() {
+      if (stopped || paused) return;
+      while (arpNext < ctx.currentTime + 0.4) {
+        const freq = ARP_NOTES[arpIdx % ARP_NOTES.length];
+        const t = arpNext;
+        const osc = ctx.createOscillator();
+        const env = ctx.createGain();
+        osc.type = "square";
+        osc.frequency.value = freq;
+        env.gain.setValueAtTime(0, t);
+        env.gain.linearRampToValueAtTime(1, t + 0.005);   // 5 ms attack
+        env.gain.exponentialRampToValueAtTime(0.001, t + 0.155); // 150 ms decay
+        osc.connect(env);
+        env.connect(arpGain);
+        osc.start(t);
+        osc.stop(t + 0.16);
+        arpNext += 0.20;
+        arpIdx++;
+      }
+      arpTimer = setTimeout(scheduleArp, 50);
+    }
+    scheduleArp();
+
+    // ── Layer 3: Space Pad ───────────────────────────────────────────────────
+    // Two sawtooth oscs at 220/221 Hz (shimmer), lowpass filter sweeps 300–1200 Hz / 4 s
+    const padFilter = ctx.createBiquadFilter();
+    padFilter.type = "lowpass";
+    padFilter.frequency.value = 300;
+
+    const padGain = ctx.createGain();
+    padGain.gain.value = 0.02;
+    padFilter.connect(padGain);
+    padGain.connect(musicGain);
+
+    const padOsc1 = ctx.createOscillator();
+    padOsc1.type = "sawtooth";
+    padOsc1.frequency.value = 220;
+    padOsc1.connect(padFilter);
+
+    const padOsc2 = ctx.createOscillator();
+    padOsc2.type = "sawtooth";
+    padOsc2.frequency.value = 221;
+    padOsc2.connect(padFilter);
+
+    padOsc1.start();
+    padOsc2.start();
+
+    let sweepTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function scheduleSweep() {
+      if (stopped) return;
+      const t = ctx.currentTime;
+      padFilter.frequency.cancelScheduledValues(t);
+      padFilter.frequency.setValueAtTime(300, t);
+      padFilter.frequency.linearRampToValueAtTime(1200, t + 4);
+      padFilter.frequency.linearRampToValueAtTime(300, t + 8);
+      sweepTimer = setTimeout(scheduleSweep, 8000);
+    }
+    scheduleSweep();
+
+    // ── Layer 4: Random Bleeps ───────────────────────────────────────────────
+    // Triangle wave, 800–1600 Hz, fires every 2–4 s, 80 ms duration
+    const bleepGain = ctx.createGain();
+    bleepGain.gain.value = 0.03;
+    bleepGain.connect(musicGain);
+
+    let bleepTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function scheduleBleep() {
+      if (stopped || paused) return;
+      bleepTimer = setTimeout(() => {
+        if (stopped || paused) return;
+        const freq = 800 + Math.random() * 800;
+        const t = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const env = ctx.createGain();
+        osc.type = "triangle";
+        osc.frequency.value = freq;
+        env.gain.setValueAtTime(0, t);
+        env.gain.linearRampToValueAtTime(1, t + 0.005);
+        env.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+        osc.connect(env);
+        env.connect(bleepGain);
+        osc.start(t);
+        osc.stop(t + 0.08);
+        scheduleBleep();
+      }, 2000 + Math.random() * 2000);
+    }
+    scheduleBleep();
+
+    // ── Controls ─────────────────────────────────────────────────────────────
+    musicRef.current = {
+      stop() {
+        stopped = true;
+        if (arpTimer) clearTimeout(arpTimer);
+        if (sweepTimer) clearTimeout(sweepTimer);
+        if (bleepTimer) clearTimeout(bleepTimer);
+        bassOsc.stop(); lfo.stop();
+        padOsc1.stop(); padOsc2.stop();
+      },
+      pause() {
+        paused = true;
+        if (arpTimer) clearTimeout(arpTimer);
+        if (bleepTimer) clearTimeout(bleepTimer);
+        musicGain.gain.setTargetAtTime(0, ctx.currentTime, 0.05);
+      },
+      resume() {
+        paused = false;
+        musicGain.gain.setTargetAtTime(1, ctx.currentTime, 0.05);
+        arpNext = ctx.currentTime + 0.05;
+        scheduleArp();
+        scheduleBleep();
+        scheduleSweep();
+      },
+    };
+  }, [getCtx]);
+
+  const stopMusic = useCallback(() => {
+    musicRef.current?.stop();
+    musicRef.current = null;
+  }, []);
+
+  const pauseMusic = useCallback(() => {
+    musicRef.current?.pause();
+  }, []);
+
+  const resumeMusic = useCallback(() => {
+    if (!musicRef.current) return;
+    const { ctx } = getCtx();
+    if (ctx.state === "suspended") ctx.resume();
+    musicRef.current.resume();
+  }, [getCtx]);
+
+  const toggleMute = useCallback(() => {
+    mutedRef.current = !mutedRef.current;
+    setMuted(mutedRef.current);
+    if (masterRef.current) masterRef.current.gain.value = mutedRef.current ? 0 : 1;
+  }, []);
+
+  return {
+    playShoot, playAlienExplosion, playPlayerHit,
+    playLevelUp, playGameOver,
+    startMusic, stopMusic, pauseMusic, resumeMusic,
+    muted, toggleMute,
+  };
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export default function SpaceInvaders() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stateRef = useRef({
@@ -51,6 +357,10 @@ export default function SpaceInvaders() {
     keys: {} as Record<string, boolean>,
   });
   const rafRef = useRef<number>(0);
+
+  const audio = useAudio();
+  const audioRef = useRef(audio);
+  audioRef.current = audio;
 
   const updateHUD = useCallback(() => {
     const s = stateRef.current;
@@ -84,6 +394,7 @@ export default function SpaceInvaders() {
     updateHUD();
     const pb = document.getElementById("btnPause") as HTMLButtonElement | null;
     if (pb) { pb.disabled = false; pb.textContent = "Pause"; }
+    audioRef.current.startMusic();
   }, [initLevel, updateHUD]);
 
   const drawAlien = useCallback((cx: CanvasRenderingContext2D, a: Alien) => {
@@ -148,8 +459,15 @@ export default function SpaceInvaders() {
         s.keys[e.key] = true;
         if (e.key === " ") { e.preventDefault(); if (s.gs === "idle" || s.gs === "over") startGame(); }
         if (e.key === "p" || e.key === "P") {
-          if (s.gs === "playing") { s.gs = "paused"; const pb = document.getElementById("btnPause"); if (pb) pb.textContent = "Resume"; }
-          else if (s.gs === "paused") { s.gs = "playing"; const pb = document.getElementById("btnPause"); if (pb) pb.textContent = "Pause"; }
+          if (s.gs === "playing") {
+            s.gs = "paused";
+            const pb = document.getElementById("btnPause"); if (pb) pb.textContent = "Resume";
+            audioRef.current.pauseMusic();
+          } else if (s.gs === "paused") {
+            s.gs = "playing";
+            const pb = document.getElementById("btnPause"); if (pb) pb.textContent = "Pause";
+            audioRef.current.resumeMusic();
+          }
         }
       } else { delete s.keys[e.key]; }
     };
@@ -168,6 +486,7 @@ export default function SpaceInvaders() {
       if ((s.keys[" "] || s.keys["shoot"]) && now - s.lastShot > 300) {
         s.bullets.push({ x: s.px, y: s.py - 14 });
         s.lastShot = now;
+        audioRef.current.playShoot();
       }
 
       s.bullets.forEach(b => b.y -= 9);
@@ -178,7 +497,12 @@ export default function SpaceInvaders() {
       s.parts = s.parts.filter(p => p.life > 0);
 
       const alive = s.aliens.filter(a => a.alive);
-      if (!alive.length) { s.level++; initLevel(); updateHUD(); return; }
+      if (!alive.length) {
+        s.level++;
+        audioRef.current.playLevelUp();
+        initLevel(); updateHUD();
+        return;
+      }
 
       s.atick++;
       const moveEvery = Math.max(3, 18 - s.level * 2 - Math.floor(alive.length / 10));
@@ -209,11 +533,14 @@ export default function SpaceInvaders() {
             s.score += (a.t + 1) * 10;
             s.best = Math.max(s.best, s.score);
             spawnParts(a.x, a.y, ALIEN_COLORS[a.t]);
+            audioRef.current.playAlienExplosion();
             updateHUD();
             break;
           }
         }
       }
+
+      let triggeredGameOver = false;
 
       for (let i = s.abuls.length - 1; i >= 0; i--) {
         const b = s.abuls[i];
@@ -221,13 +548,26 @@ export default function SpaceInvaders() {
           s.abuls.splice(i, 1);
           spawnParts(s.px, s.py, "#00ccff");
           s.lives--;
+          audioRef.current.playPlayerHit();
           updateHUD();
-          if (s.lives <= 0) { s.gs = "over"; updateHUD(); }
+          if (s.lives <= 0 && !triggeredGameOver) {
+            triggeredGameOver = true;
+            s.gs = "over";
+            audioRef.current.playGameOver();
+            audioRef.current.stopMusic();
+            updateHUD();
+          }
         }
       }
 
       alive.forEach(a => {
-        if (a.y + a.h / 2 > s.py - 10) { s.gs = "over"; s.lives = 0; updateHUD(); }
+        if (a.y + a.h / 2 > s.py - 10 && !triggeredGameOver) {
+          triggeredGameOver = true;
+          s.gs = "over"; s.lives = 0;
+          audioRef.current.playGameOver();
+          audioRef.current.stopMusic();
+          updateHUD();
+        }
       });
     }
 
@@ -312,6 +652,7 @@ export default function SpaceInvaders() {
       cancelAnimationFrame(rafRef.current);
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("keyup", onKey);
+      audioRef.current.stopMusic();
     };
   }, [drawAlien, initLevel, spawnParts, startGame, updateHUD]);
 
@@ -323,8 +664,15 @@ export default function SpaceInvaders() {
   const togglePause = () => {
     const s = stateRef.current;
     const pb = document.getElementById("btnPause");
-    if (s.gs === "playing") { s.gs = "paused"; if (pb) pb.textContent = "Resume"; }
-    else if (s.gs === "paused") { s.gs = "playing"; if (pb) pb.textContent = "Pause"; }
+    if (s.gs === "playing") {
+      s.gs = "paused";
+      if (pb) pb.textContent = "Resume";
+      audioRef.current.pauseMusic();
+    } else if (s.gs === "paused") {
+      s.gs = "playing";
+      if (pb) pb.textContent = "Pause";
+      audioRef.current.resumeMusic();
+    }
   };
 
   return (
@@ -358,6 +706,13 @@ export default function SpaceInvaders() {
           className="px-5 py-2 font-mono text-sm border border-gray-600 rounded text-gray-200 hover:border-yellow-500 hover:text-yellow-400 transition-colors bg-transparent disabled:opacity-30 disabled:cursor-not-allowed"
         >
           Pause
+        </button>
+        <button
+          onClick={audio.toggleMute}
+          className="px-5 py-2 font-mono text-sm border border-gray-600 rounded text-gray-200 hover:border-purple-500 hover:text-purple-400 transition-colors bg-transparent"
+          title={audio.muted ? "Unmute" : "Mute"}
+        >
+          {audio.muted ? "🔇" : "🔊"}
         </button>
       </div>
 

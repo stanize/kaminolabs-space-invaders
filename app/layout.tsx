@@ -3,7 +3,26 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Space Invaders",
-  description: "Classic Space Invaders built with Next.js",
+  description: "Can you defeat the alien invasion?",
+  openGraph: {
+    title: "Space Invaders",
+    description: "Can you defeat the alien invasion?",
+    url: "https://space-invaders.kaminolabs.dev",
+    siteName: "Space Invaders",
+    images: [{
+      url: "https://space-invaders.kaminolabs.dev/og-image.png",
+      width: 1200,
+      height: 630,
+      alt: "Space Invaders game preview"
+    }],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Space Invaders",
+    description: "Can you defeat the alien invasion?",
+    images: ["https://space-invaders.kaminolabs.dev/og-image.png"],
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
