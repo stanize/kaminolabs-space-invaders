@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useState } from "react";
+import Image from "next/image";
 
 const W = 480;
 const H = 460;
@@ -364,6 +365,9 @@ export default function SpaceInvaders() {
   const audioRef = useRef(audio);
   audioRef.current = audio;
 
+  const [gsDisplay, setGsDisplay] = useState<"idle" | "playing" | "paused" | "over">("idle");
+  const [pressed, setPressed] = useState<string | null>(null);
+
   const updateHUD = useCallback(() => {
     const s = stateRef.current;
     const el = (id: string) => document.getElementById(id);
@@ -373,6 +377,7 @@ export default function SpaceInvaders() {
     const hi = el("hi"); if (hi) hi.textContent = String(s.best);
     const pb = el("btnPause") as HTMLButtonElement | null;
     if (pb) pb.disabled = s.gs !== "playing" && s.gs !== "paused";
+    setGsDisplay(s.gs);
   }, []);
 
   const initLevel = useCallback(() => {
@@ -691,6 +696,8 @@ export default function SpaceInvaders() {
     }
   };
 
+  const pauseActive = gsDisplay === "playing" || gsDisplay === "paused";
+
   return (
     <div
       className="flex flex-col items-center select-none overflow-x-hidden"
@@ -718,32 +725,49 @@ export default function SpaceInvaders() {
         />
       </div>
 
-      {/* System buttons */}
-      <div className="flex justify-center gap-3 pt-3">
-        <button
-          onClick={startGame}
-          className="font-mono text-sm border border-gray-600 rounded text-gray-200 hover:border-cyan-500 hover:text-cyan-400 transition-colors bg-transparent"
-          style={{ minHeight: 48, minWidth: 80 }}
+      {/* Top row: start / pause / mute — icon-only buttons */}
+      <div className="flex justify-center gap-4 pt-3">
+
+        {/* Start — shows pause.png while game is running */}
+        <div
+          onPointerDown={startGame}
+          style={{ cursor: "pointer", userSelect: "none", touchAction: "none" }}
         >
-          Start
-        </button>
-        <button
+          <Image
+            src={gsDisplay === "playing" ? "/icons/pause.png" : "/icons/start.png"}
+            alt={gsDisplay === "playing" ? "Game running" : "Start"}
+            width={72}
+            height={72}
+          />
+        </div>
+
+        {/* Pause/Resume — greyed out when no game is active */}
+        <div
           id="btnPause"
-          onClick={togglePause}
-          disabled
-          className="font-mono text-sm border border-gray-600 rounded text-gray-200 hover:border-yellow-500 hover:text-yellow-400 transition-colors bg-transparent disabled:opacity-30 disabled:cursor-not-allowed"
-          style={{ minHeight: 48, minWidth: 80 }}
+          onPointerDown={togglePause}
+          style={{
+            cursor: pauseActive ? "pointer" : "default",
+            userSelect: "none",
+            touchAction: "none",
+            opacity: pauseActive ? 1 : 0.3,
+            pointerEvents: pauseActive ? "auto" : "none",
+          }}
         >
-          Pause
-        </button>
-        <button
-          onClick={audio.toggleMute}
-          className="font-mono text-sm border border-gray-600 rounded text-gray-200 hover:border-purple-500 hover:text-purple-400 transition-colors bg-transparent"
-          title={audio.muted ? "Unmute" : "Mute"}
-          style={{ minHeight: 48, minWidth: 48 }}
+          <Image src="/icons/pause.png" alt="Pause / Resume" width={72} height={72} />
+        </div>
+
+        {/* Mute toggle */}
+        <div
+          onPointerDown={audio.toggleMute}
+          style={{ cursor: "pointer", userSelect: "none", touchAction: "none" }}
         >
-          {audio.muted ? "🔇" : "🔊"}
-        </button>
+          <Image
+            src={audio.muted ? "/icons/mute.png" : "/icons/unmute.png"}
+            alt={audio.muted ? "Unmute" : "Mute"}
+            width={72}
+            height={72}
+          />
+        </div>
       </div>
 
       {/* Keyboard hint — desktop only */}
@@ -757,24 +781,36 @@ export default function SpaceInvaders() {
         style={{ width: "100vw", maxWidth: 480, touchAction: "none", userSelect: "none" }}
       >
         <div className="flex gap-2 px-3">
-          <button
-            onPointerDown={() => handleMobile("ArrowLeft", true)}
-            onPointerUp={() => handleMobile("ArrowLeft", false)}
-            onPointerLeave={() => handleMobile("ArrowLeft", false)}
-            className="flex-1 border-2 border-gray-500 rounded-lg text-gray-300 active:bg-gray-800 bg-transparent font-mono"
-            style={{ height: 80, fontSize: 24, touchAction: "none" }}
+          <div
+            onPointerDown={() => { handleMobile("ArrowLeft", true); setPressed("left"); }}
+            onPointerUp={() => { handleMobile("ArrowLeft", false); setPressed(null); }}
+            onPointerLeave={() => { handleMobile("ArrowLeft", false); setPressed(null); }}
+            className="flex-1 flex items-center justify-center border-2 border-gray-500 rounded-lg"
+            style={{
+              height: 80,
+              touchAction: "none",
+              cursor: "pointer",
+              opacity: pressed === "left" ? 0.6 : 1,
+              transition: "opacity 0.05s",
+            }}
           >
-            ◀ LEFT
-          </button>
-          <button
-            onPointerDown={() => handleMobile("ArrowRight", true)}
-            onPointerUp={() => handleMobile("ArrowRight", false)}
-            onPointerLeave={() => handleMobile("ArrowRight", false)}
-            className="flex-1 border-2 border-gray-500 rounded-lg text-gray-300 active:bg-gray-800 bg-transparent font-mono"
-            style={{ height: 80, fontSize: 24, touchAction: "none" }}
+            <Image src="/icons/left.png" alt="Move Left" width={80} height={80} />
+          </div>
+          <div
+            onPointerDown={() => { handleMobile("ArrowRight", true); setPressed("right"); }}
+            onPointerUp={() => { handleMobile("ArrowRight", false); setPressed(null); }}
+            onPointerLeave={() => { handleMobile("ArrowRight", false); setPressed(null); }}
+            className="flex-1 flex items-center justify-center border-2 border-gray-500 rounded-lg"
+            style={{
+              height: 80,
+              touchAction: "none",
+              cursor: "pointer",
+              opacity: pressed === "right" ? 0.6 : 1,
+              transition: "opacity 0.05s",
+            }}
           >
-            RIGHT ▶
-          </button>
+            <Image src="/icons/right.png" alt="Move Right" width={80} height={80} />
+          </div>
         </div>
       </div>
     </div>
